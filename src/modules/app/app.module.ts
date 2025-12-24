@@ -6,6 +6,7 @@ import { CustomPrismaModule } from "nestjs-prisma";
 import { createPrismaClient } from "prisma.extension";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import appConfig from "src/config/app.config";
+import { SpotifyModule } from "src/spotify/spotify.module";
 
 @Module({
     controllers: [],
@@ -29,7 +30,8 @@ import appConfig from "src/config/app.config";
             },
         }),
 
-        AuthModule
+        AuthModule,
+        SpotifyModule
     ],
     providers: []
 })
