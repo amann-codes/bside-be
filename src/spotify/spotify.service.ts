@@ -9,97 +9,172 @@ export class SpotifyService {
         private readonly prismaService: CustomPrismaService<ExtendedPrismaClient>
     ) { }
     async GetSpotifyAccessToken() {
-
         const access = await this.prismaService.client.spotifyAccess.findFirst();
         const now = Date.now();
-        const buffer = 300;
 
-        if (access && access.expiresAt.getTime() > (now + buffer)) {
-            console.log('Token not expired')
+        if (access && access.expiresAt.getTime() > now + 60000) {
+            await this.prismaService.client.spotifyAccess.update({
+                where: {
+                    id: 1
+                },
+                data: {
+                    timesRequested: { increment: 1 },
+                }
+            })
+            console.log('Token not expired');
             return access.accessToken;
         }
 
         const clientId = process.env.SPOTIFY_CLIENT_ID;
         const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
 
-        const option = {
-            method: "POST",
-            url: "https://accounts.spotify.com/api/token",
-            form: {
-                grant_type: 'client_credentials'
-            },
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                Authorization: 'Basic ' + (Buffer.from(clientId + ':' + clientSecret).toString('base64')),
-            },
-        }
-        console.log('Token not expired')
+        const headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Authorization: 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64'),
+        };
 
-        const req = await fetch(option.url, {
-            method: option.method,
-            body: new URLSearchParams(option.form),
-            headers: option.headers,
-        })
+        const body = new URLSearchParams({
+            grant_type: 'client_credentials',
+        });
 
-        const res = await req.json()
-        const expiryDate = new Date(Date.now() + (res.expires_in));
+        console.log('Token renewed');
+
+        const req = await fetch('https://accounts.spotify.com/api/token', {
+            method: 'POST',
+            headers,
+            body,
+        });
+
+        const res = await req.json();
+
+        const expiresAtMs = Date.now() + res.expires_in * 1000;
 
         const accessUpdate = await this.prismaService.client.spotifyAccess.upsert({
             where: { id: 1 },
             update: {
                 accessToken: res.access_token,
-                expiresAt: expiryDate,
-                timeUpdates: {
-                    increment: 1
-                }
-
+                expiresAt: new Date(expiresAtMs),
+                timeUpdates: { increment: 1 },
+                timesRequested: { increment: 1 },
             },
             create: {
+                id: 1,
                 accessToken: res.access_token,
-                expiresAt: expiryDate,
-                tokenType: res.token_type
-            }
-        })
+                expiresAt: new Date(expiresAtMs),
+                tokenType: res.token_type,
+            },
+        });
 
-        return accessUpdate.accessToken
+        return accessUpdate.accessToken;
     }
-
-    async SearchSpotifyEntity(query: string) {
+    async SearchSpotifyEntity(query: string, limit = 20) {
         try {
             if (!query) {
-                throw new Error(`Query required to perform search`)
+                throw new Error("Query required to perform search")
             }
 
-            const accessToken = await this.GetSpotifyAccessToken();
-
+            const accessToken = await this.GetSpotifyAccessToken()
             if (!accessToken) {
-                throw new Error(`Getting access token`)
+                throw new Error("Failed to get access token")
             }
 
-            const option = {
-                method: "GET",
-                url: `https://api.spotify.com/v1/search?q=${query}&type=album,artist,track`,
-                headers: {
-                    "Content-Type": "applcation-json",
-                    Authorization: `Bearer ${accessToken}`
+            const result = await fetch(
+                `https://api.spotify.com/v1/search?q=${query}&type=album,artist,track&limit=${limit}`,
+                {
+                    method: "GET",
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                    },
                 }
-            }
+            )
 
-            const result = await fetch(option.url, {
-                method: option.method,
-                headers: option.headers,
-            })
-
-            if (!result) {
-                throw new Error("Getting search reasult")
+            if (!result.ok) {
+                throw new Error("Spotify search failed")
             }
 
             const res = await result.json()
 
-            return res;
+            const tracks = res.tracks.items.map((t: any) => ({
+                id: t.id,
+                name: t.name,
+                type: "track" as const,
+                entityType: "track" as const,
+                popularity: t.popularity,
+                duration_ms: t.duration_ms,
+                explicit: t.explicit,
+                album_type: t.album.album_type,
+                album: {
+                    id: t.album.id,
+                    name: t.album.name,
+                    type: "album" as const,
+                    images: t.album.images,
+                    release_date: t.album.release_date,
+                    album_type: t.album.album_type,
+                    total_tracks: t.album.total_tracks,
+                },
+                artists: t.artists.map((a: any) => ({
+                    id: a.id,
+                    name: a.name,
+                    type: "artist" as const,
+                    images: a.images ?? [],
+                    genres: [],
+                    popularity: a.popularity ?? 0,
+                })),
+            }))
+
+            const artists = res.artists.items.map((a: any) => ({
+                id: a.id,
+                name: a.name,
+                type: "artist" as const,
+                entityType: "artist" as const,
+                images: a.images,
+                genres: a.genres,
+                popularity: a.popularity,
+            }))
+
+            const albums = res.albums.items.map((a: any) => ({
+                id: a.id,
+                name: a.name,
+                type: "album" as const,
+                entityType: "album" as const,
+                images: a.images,
+                release_date: a.release_date,
+                album_type: a.album_type,
+                total_tracks: a.total_tracks,
+            }))
+            const albumPopularityMap = new Map<string, number>()
+
+            for (const track of tracks) {
+                const albumId = track.album.id
+                const current = albumPopularityMap.get(albumId) ?? 0
+                albumPopularityMap.set(
+                    albumId,
+                    Math.max(current, track.popularity)
+                )
+            }
+
+            const unified = [
+                ...tracks.map(t => ({
+                    ...t,
+                    _score: t.popularity,
+                })),
+                ...artists.map(a => ({
+                    ...a,
+                    _score: a.popularity,
+                })),
+                ...albums.map(a => ({
+                    ...a,
+                    _score: albumPopularityMap.get(a.id) ?? 0,
+                })),
+            ]
+
+            unified.sort((a, b) => b._score - a._score)
+
+            return unified.map(({ _score, ...entity }) => entity)
 
         } catch (e) {
-            throw new Error(`searching you query: ${e}`)
+            throw new Error(`Spotify search failed: ${e}`)
         }
     }
+
 }

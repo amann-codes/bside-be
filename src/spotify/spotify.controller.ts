@@ -10,7 +10,6 @@ export class SpotifyController {
     @Get('/search/')
     async SearchEntity(@Query('query') query: string) {
         const res = await this.spotifyService.SearchSpotifyEntity(query)
-        console.log(res);
         return res;
     }
 

@@ -13,13 +13,14 @@ datasource db {
 }
 
 model SpotifyAccess {
-  id            Int      @id @default(1)
-  accessToken   String
-  tokenType     String
-  expiresAt     DateTime
-  timeUpdates   Int      @default(1)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             Int      @id @default(1)
+  accessToken    String
+  tokenType      String
+  expiresAt      DateTime
+  timeUpdates    Int      @default(1)
+  timesRequested Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model User {
