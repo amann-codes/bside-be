@@ -24,7 +24,7 @@ async function bootstrap(): Promise<{ port: number }> {
 
   {
     app.enableCors({
-      origin: ["http://localhost:3000"],
+      origin: ["http://localhost:3000", "https://side--b.vercel.app"],
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       allowedHeaders: ["Content-Type", "Authorization"]
     })
