@@ -8,6 +8,7 @@ export class SpotifyService {
         @Inject('PrismaService')
         private readonly prismaService: CustomPrismaService<ExtendedPrismaClient>
     ) { }
+
     async GetSpotifyAccessToken() {
         const access = await this.prismaService.client.spotifyAccess.findFirst();
         const now = Date.now();
@@ -67,6 +68,7 @@ export class SpotifyService {
 
         return accessUpdate.accessToken;
     }
+
     async SearchSpotifyEntity(query: string, limit = 20) {
         try {
             if (!query) {
@@ -177,4 +179,164 @@ export class SpotifyService {
         }
     }
 
+    async GetAlbum(id: string) {
+        try {
+            if (!id) {
+                throw new Error("Id required to perform search")
+            }
+
+            const accessToken = await this.GetSpotifyAccessToken()
+
+            if (!accessToken) {
+                throw new Error("Failed to get access token")
+            }
+
+            const result = await fetch(
+                `https://api.spotify.com/v1/albums/${id}`,
+                {
+                    method: "GET",
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                }
+            )
+
+            if (!result.ok) {
+                console.log(result)
+                throw new Error("Getting Result")
+            }
+
+            const album = await result.json();
+            album.tracks.items.map((t) => {
+                console.log(t.explicit)
+            })
+            const res = {
+                album_type: album.album_type,
+                total_tracks: album.total_tracks,
+                id: album.id,
+                images: album.images,
+                name: album.name,
+                release_date: album.release_date,
+                type: album.type,
+                artists: album.artists.map((a: any) => ({
+                    id: a.id,
+                    name: a.name,
+                    type: "artist" as const,
+                })),
+                tracks: album.tracks.items.map((t: any) => ({
+                    id: t.id,
+                    name: t.name,
+                    duration_ms: t.duration_ms,
+                    explicit: t.explicit,
+                    type:t.type,
+                    artists: t.artists.map((a: any) => ({
+                        id: a.id,
+                        name: a.name,
+                        type: "artist" as const,
+                    }))
+
+                })),
+                genres: album.genres,
+                popularity: album.popularity,
+            }
+            console.log("album result", res)
+            return res
+
+        } catch (e) {
+            throw new Error(`Getting Album:${e}`)
+
+        }
+    }
+    async GetArtist(id: string) {
+        if (!id) {
+            throw new Error("Id required for artist");
+        }
+
+        const accessToken = await this.GetSpotifyAccessToken();
+
+        if (!accessToken) {
+            throw new Error("Failed to get access token");
+        }
+
+        const result = await fetch(
+            `https://api.spotify.com/v1/artists/${id}`,
+            {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        if (!result.ok) {
+            throw new Error("Failed to fetch artist");
+        }
+
+        const artist = await result.json();
+
+        const res = {
+            id: artist.id,
+            name: artist.name,
+            type: "artist" as const,
+            images: artist.images,
+            genres: artist.genres,
+            popularity: artist.popularity,
+            followers: artist.followers.total,
+        };
+
+        return res;
+    }
+
+    async GetTrack(id: string) {
+        if (!id) {
+            throw new Error("Id required for track");
+        }
+
+        const accessToken = await this.GetSpotifyAccessToken();
+
+        if (!accessToken) {
+            throw new Error("Failed to get access token");
+        }
+
+        const result = await fetch(
+            `https://api.spotify.com/v1/tracks/${id}`,
+            {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        if (!result.ok) {
+            throw new Error("Failed to fetch track");
+        }
+
+        const track = await result.json();
+
+        const res = {
+            id: track.id,
+            name: track.name,
+            type: "track" as const,
+            duration_ms: track.duration_ms,
+            explicit: track.explicit,
+            popularity: track.popularity,
+            album: {
+                id: track.album.id,
+                name: track.album.name,
+                type: "album" as const,
+                images: track.album.images,
+                release_date: track.album.release_date,
+                album_type: track.album.album_type,
+                total_tracks: track.album.total_tracks,
+            },
+            artists: track.artists.map((a: any) => ({
+                id: a.id,
+                name: a.name,
+                type: "artist" as const,
+            })),
+        };
+
+        return res;
+    }
 }

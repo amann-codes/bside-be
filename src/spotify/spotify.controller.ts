@@ -8,9 +8,27 @@ export class SpotifyController {
     ) { }
 
     @Get('/search/')
-    async SearchEntity(@Query('query') query: string) {
+    async SearchEntityController(@Query('query') query: string) {
         const res = await this.spotifyService.SearchSpotifyEntity(query)
         return res;
+    }
+
+    @Get('/get/album/')
+    async GetAlbumController(@Query('id') id: string) {
+        const res = await this.spotifyService.GetAlbum(id)
+        return res
+    }
+
+    @Get('/get/artist/')
+    async GetArtistController(@Query('id') id: string) {
+        const res = await this.spotifyService.GetArtist(id)
+        return res
+    }
+
+    @Get('/get/track/')
+    async GetTrackontroller(@Query('id') id: string) {
+        const res = await this.spotifyService.GetTrack(id)
+        return res
     }
 
 }
